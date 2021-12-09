@@ -2,13 +2,10 @@ package main
 
 import (
 	"math"
-	"unsafe"
-
-	"github.com/gotranspile/cxgo/runtime/libc"
-	"maze.io/x/math32"
+	"math/rand"
+	"time"
 )
 
-const CLOCK_MONOTONIC = 0
 const PHYSAC_MAX_BODIES = 64
 const PHYSAC_MAX_MANIFOLDS = 4096
 const PHYSAC_MAX_VERTICES = 24
@@ -17,20 +14,13 @@ const PHYSAC_COLLISION_ITERATIONS = 100
 const PHYSAC_PENETRATION_ALLOWANCE = 0.05
 const PHYSAC_PENETRATION_CORRECTION = 0.4
 const PHYSAC_PI = 3.141592653589793
-const _POSIX_C_SOURCE = 0x30A8D
 const PHYSAC_FLT_MAX = 3.402823466e+38
 const PHYSAC_EPSILON = 1e-06
 
 type Vector2 struct {
-	X float32
-	Y float32
+	X float64
+	Y float64
 }
-type bool int
-
-const (
-	false = bool(iota)
-	true
-)
 
 type PhysicsShapeType int
 
@@ -41,10 +31,10 @@ const (
 
 type PhysicsBody *PhysicsBodyData
 type Mat2 struct {
-	M00 float32
-	M01 float32
-	M10 float32
-	M11 float32
+	M00 float64
+	M01 float64
+	M10 float64
+	M11 float64
 }
 type PolygonData struct {
 	VertexCount uint
@@ -54,7 +44,7 @@ type PolygonData struct {
 type PhysicsShape struct {
 	Type       PhysicsShapeType
 	Body       PhysicsBody
-	Radius     float32
+	Radius     float64
 	Transform  Mat2
 	VertexData PolygonData
 }
@@ -64,16 +54,16 @@ type PhysicsBodyData struct {
 	Position        Vector2
 	Velocity        Vector2
 	Force           Vector2
-	AngularVelocity float32
-	Torque          float32
-	Orient          float32
-	Inertia         float32
-	InverseInertia  float32
-	Mass            float32
-	InverseMass     float32
-	StaticFriction  float32
-	DynamicFriction float32
-	Restitution     float32
+	AngularVelocity float64
+	Torque          float64
+	Orient          float64
+	Inertia         float64
+	InverseInertia  float64
+	Mass            float64
+	InverseMass     float64
+	StaticFriction  float64
+	DynamicFriction float64
+	Restitution     float64
 	UseGravity      bool
 	IsGrounded      bool
 	FreezeOrient    bool
@@ -83,17 +73,16 @@ type PhysicsManifoldData struct {
 	Id              uint
 	BodyA           PhysicsBody
 	BodyB           PhysicsBody
-	Penetration     float32
+	Penetration     float64
 	Normal          Vector2
 	Contacts        [2]Vector2
 	ContactsCount   uint
-	Restitution     float32
-	DynamicFriction float32
-	StaticFriction  float32
+	Restitution     float64
+	DynamicFriction float64
+	StaticFriction  float64
 }
 type PhysicsManifold *PhysicsManifoldData
 
-var usedMemory uint = 0
 var physicsThreadEnabled bool = bool(false)
 var baseTime float64 = 0.0
 var startTime float64 = 0.0
@@ -115,13 +104,12 @@ func InitPhysics() {
 func IsPhysicsEnabled() bool {
 	return physicsThreadEnabled
 }
-func SetPhysicsGravity(x float32, y float32) {
+func SetPhysicsGravity(x float64, y float64) {
 	gravityForce.X = x
 	gravityForce.Y = y
 }
-func CreatePhysicsBodyCircle(pos Vector2, radius float32, density float32) PhysicsBody {
+func CreatePhysicsBodyCircle(pos Vector2, radius float64, density float64) PhysicsBody {
 	var newBody PhysicsBody = new(PhysicsBodyData)
-	usedMemory += uint(unsafe.Sizeof(PhysicsBodyData{}))
 	var newId int = FindAvailableBodyIndex()
 	if newId != -1 {
 		newBody.Id = uint(newId)
@@ -137,15 +125,15 @@ func CreatePhysicsBodyCircle(pos Vector2, radius float32, density float32) Physi
 		newBody.Shape.Radius = radius
 		newBody.Shape.Transform = Mat2Radians(0.0)
 		newBody.Shape.VertexData = PolygonData{}
-		newBody.Mass = float32(PHYSAC_PI * float64(radius) * float64(radius) * float64(density))
+		newBody.Mass = float64(PHYSAC_PI * float64(radius) * float64(radius) * float64(density))
 		if float64(newBody.Mass) != 0.0 {
-			newBody.InverseMass = float32(1.0 / float64(newBody.Mass))
+			newBody.InverseMass = float64(1.0 / float64(newBody.Mass))
 		} else {
 			newBody.InverseMass = 0.0
 		}
 		newBody.Inertia = newBody.Mass * radius * radius
 		if float64(newBody.Inertia) != 0.0 {
-			newBody.InverseInertia = float32(1.0 / float64(newBody.Inertia))
+			newBody.InverseInertia = float64(1.0 / float64(newBody.Inertia))
 		} else {
 			newBody.InverseInertia = 0.0
 		}
@@ -160,9 +148,8 @@ func CreatePhysicsBodyCircle(pos Vector2, radius float32, density float32) Physi
 	}
 	return newBody
 }
-func CreatePhysicsBodyRectangle(pos Vector2, width float32, height float32, density float32) PhysicsBody {
+func CreatePhysicsBodyRectangle(pos Vector2, width float64, height float64, density float64) PhysicsBody {
 	var newBody PhysicsBody = new(PhysicsBodyData)
-	usedMemory += uint(unsafe.Sizeof(PhysicsBodyData{}))
 	var newId int = FindAvailableBodyIndex()
 	if newId != -1 {
 		newBody.Id = uint(newId)
@@ -179,8 +166,8 @@ func CreatePhysicsBodyRectangle(pos Vector2, width float32, height float32, dens
 		newBody.Shape.Transform = Mat2Radians(0.0)
 		newBody.Shape.VertexData = CreateRectanglePolygon(pos, Vector2{X: width, Y: height})
 		var center Vector2 = Vector2{X: 0.0, Y: 0.0}
-		var area float32 = 0.0
-		var inertia float32 = 0.0
+		var area float64 = 0.0
+		var inertia float64 = 0.0
 		for i := int(0); i < int(newBody.Shape.VertexData.VertexCount); i++ {
 			var (
 				p1        Vector2 = newBody.Shape.VertexData.Positions[i]
@@ -191,31 +178,31 @@ func CreatePhysicsBodyRectangle(pos Vector2, width float32, height float32, dens
 					return 0
 				}())
 				p2           Vector2 = newBody.Shape.VertexData.Positions[nextIndex]
-				D            float32 = MathCrossVector2(p1, p2)
-				triangleArea float32 = D / 2
+				D            float64 = MathCrossVector2(p1, p2)
+				triangleArea float64 = D / 2
 			)
 			area += triangleArea
-			center.X += float32(float64(triangleArea) * 1.0 / 3.0 * float64(p1.X+p2.X))
-			center.Y += float32(float64(triangleArea) * 1.0 / 3.0 * float64(p1.Y+p2.Y))
-			var intx2 float32 = p1.X*p1.X + p2.X*p1.X + p2.X*p2.X
-			var inty2 float32 = p1.Y*p1.Y + p2.Y*p1.Y + p2.Y*p2.Y
-			inertia += float32((float64(D) * (0.25 * 1.0 / 3.0)) * float64(intx2+inty2))
+			center.X += float64(float64(triangleArea) * 1.0 / 3.0 * float64(p1.X+p2.X))
+			center.Y += float64(float64(triangleArea) * 1.0 / 3.0 * float64(p1.Y+p2.Y))
+			var intx2 float64 = p1.X*p1.X + p2.X*p1.X + p2.X*p2.X
+			var inty2 float64 = p1.Y*p1.Y + p2.Y*p1.Y + p2.Y*p2.Y
+			inertia += float64((float64(D) * (0.25 * 1.0 / 3.0)) * float64(intx2+inty2))
 		}
-		center.X *= float32(1.0 / float64(area))
-		center.Y *= float32(1.0 / float64(area))
+		center.X *= float64(1.0 / float64(area))
+		center.Y *= float64(1.0 / float64(area))
 		for i := int(0); i < int(newBody.Shape.VertexData.VertexCount); i++ {
 			newBody.Shape.VertexData.Positions[i].X -= center.X
 			newBody.Shape.VertexData.Positions[i].Y -= center.Y
 		}
 		newBody.Mass = density * area
 		if float64(newBody.Mass) != 0.0 {
-			newBody.InverseMass = float32(1.0 / float64(newBody.Mass))
+			newBody.InverseMass = float64(1.0 / float64(newBody.Mass))
 		} else {
 			newBody.InverseMass = 0.0
 		}
 		newBody.Inertia = density * inertia
 		if float64(newBody.Inertia) != 0.0 {
-			newBody.InverseInertia = float32(1.0 / float64(newBody.Inertia))
+			newBody.InverseInertia = float64(1.0 / float64(newBody.Inertia))
 		} else {
 			newBody.InverseInertia = 0.0
 		}
@@ -230,9 +217,8 @@ func CreatePhysicsBodyRectangle(pos Vector2, width float32, height float32, dens
 	}
 	return newBody
 }
-func CreatePhysicsBodyPolygon(pos Vector2, radius float32, sides int, density float32) PhysicsBody {
+func CreatePhysicsBodyPolygon(pos Vector2, radius float64, sides int, density float64) PhysicsBody {
 	var newBody PhysicsBody = new(PhysicsBodyData)
-	usedMemory += uint(unsafe.Sizeof(PhysicsBodyData{}))
 	var newId int = FindAvailableBodyIndex()
 	if newId != -1 {
 		newBody.Id = uint(newId)
@@ -248,8 +234,8 @@ func CreatePhysicsBodyPolygon(pos Vector2, radius float32, sides int, density fl
 		newBody.Shape.Transform = Mat2Radians(0.0)
 		newBody.Shape.VertexData = CreateRandomPolygon(radius, sides)
 		var center Vector2 = Vector2{X: 0.0, Y: 0.0}
-		var area float32 = 0.0
-		var inertia float32 = 0.0
+		var area float64 = 0.0
+		var inertia float64 = 0.0
 		for i := int(0); i < int(newBody.Shape.VertexData.VertexCount); i++ {
 			var (
 				position1 Vector2 = newBody.Shape.VertexData.Positions[i]
@@ -260,31 +246,31 @@ func CreatePhysicsBodyPolygon(pos Vector2, radius float32, sides int, density fl
 					return 0
 				}())
 				position2    Vector2 = newBody.Shape.VertexData.Positions[nextIndex]
-				cross        float32 = MathCrossVector2(position1, position2)
-				triangleArea float32 = cross / 2
+				cross        float64 = MathCrossVector2(position1, position2)
+				triangleArea float64 = cross / 2
 			)
 			area += triangleArea
-			center.X += float32(float64(triangleArea) * 1.0 / 3.0 * float64(position1.X+position2.X))
-			center.Y += float32(float64(triangleArea) * 1.0 / 3.0 * float64(position1.Y+position2.Y))
-			var intx2 float32 = position1.X*position1.X + position2.X*position1.X + position2.X*position2.X
-			var inty2 float32 = position1.Y*position1.Y + position2.Y*position1.Y + position2.Y*position2.Y
-			inertia += float32((float64(cross) * (0.25 * 1.0 / 3.0)) * float64(intx2+inty2))
+			center.X += float64(float64(triangleArea) * 1.0 / 3.0 * float64(position1.X+position2.X))
+			center.Y += float64(float64(triangleArea) * 1.0 / 3.0 * float64(position1.Y+position2.Y))
+			var intx2 float64 = position1.X*position1.X + position2.X*position1.X + position2.X*position2.X
+			var inty2 float64 = position1.Y*position1.Y + position2.Y*position1.Y + position2.Y*position2.Y
+			inertia += float64((float64(cross) * (0.25 * 1.0 / 3.0)) * float64(intx2+inty2))
 		}
-		center.X *= float32(1.0 / float64(area))
-		center.Y *= float32(1.0 / float64(area))
+		center.X *= float64(1.0 / float64(area))
+		center.Y *= float64(1.0 / float64(area))
 		for i := int(0); i < int(newBody.Shape.VertexData.VertexCount); i++ {
 			newBody.Shape.VertexData.Positions[i].X -= center.X
 			newBody.Shape.VertexData.Positions[i].Y -= center.Y
 		}
 		newBody.Mass = density * area
 		if float64(newBody.Mass) != 0.0 {
-			newBody.InverseMass = float32(1.0 / float64(newBody.Mass))
+			newBody.InverseMass = float64(1.0 / float64(newBody.Mass))
 		} else {
 			newBody.InverseMass = 0.0
 		}
 		newBody.Inertia = density * inertia
 		if float64(newBody.Inertia) != 0.0 {
-			newBody.InverseInertia = float32(1.0 / float64(newBody.Inertia))
+			newBody.InverseInertia = float64(1.0 / float64(newBody.Inertia))
 		} else {
 			newBody.InverseInertia = 0.0
 		}
@@ -304,12 +290,12 @@ func PhysicsAddForce(body PhysicsBody, force Vector2) {
 		body.Force = Vector2Add(body.Force, force)
 	}
 }
-func PhysicsAddTorque(body PhysicsBody, amount float32) {
+func PhysicsAddTorque(body PhysicsBody, amount float64) {
 	if body != nil {
 		body.Torque += amount
 	}
 }
-func PhysicsShatter(body PhysicsBody, position Vector2, force float32) {
+func PhysicsShatter(body PhysicsBody, position Vector2, force float64) {
 	if body != nil {
 		if body.Shape.Type == PhysicsShapeType(PHYSICS_POLYGON) {
 			var (
@@ -327,24 +313,24 @@ func PhysicsShatter(body PhysicsBody, position Vector2, force float32) {
 						return 0
 					}())
 					positionC Vector2 = Mat2MultiplyVector2(body.Shape.Transform, Vector2Add(body.Position, vertexData.Positions[nextIndex]))
-					alpha     float32 = ((positionB.Y-positionC.Y)*(position.X-positionC.X) + (positionC.X-positionB.X)*(position.Y-positionC.Y)) / ((positionB.Y-positionC.Y)*(positionA.X-positionC.X) + (positionC.X-positionB.X)*(positionA.Y-positionC.Y))
-					beta      float32 = ((positionC.Y-positionA.Y)*(position.X-positionC.X) + (positionA.X-positionC.X)*(position.Y-positionC.Y)) / ((positionB.Y-positionC.Y)*(positionA.X-positionC.X) + (positionC.X-positionB.X)*(positionA.Y-positionC.Y))
-					gamma     float32 = float32(1.0 - float64(alpha) - float64(beta))
+					alpha     float64 = ((positionB.Y-positionC.Y)*(position.X-positionC.X) + (positionC.X-positionB.X)*(position.Y-positionC.Y)) / ((positionB.Y-positionC.Y)*(positionA.X-positionC.X) + (positionC.X-positionB.X)*(positionA.Y-positionC.Y))
+					beta      float64 = ((positionC.Y-positionA.Y)*(position.X-positionC.X) + (positionA.X-positionC.X)*(position.Y-positionC.Y)) / ((positionB.Y-positionC.Y)*(positionA.X-positionC.X) + (positionC.X-positionB.X)*(positionA.Y-positionC.Y))
+					gamma     float64 = float64(1.0 - float64(alpha) - float64(beta))
 				)
 				if float64(alpha) > 0.0 && (float64(beta) > 0.0) && (float64(gamma) > 0.0) {
 					collision = bool(true)
 					break
 				}
 			}
-			if collision != 0 {
+			if collision {
 				var (
-					count    int      = int(vertexData.VertexCount)
-					bodyPos  Vector2  = body.Position
-					vertices *Vector2 = (*Vector2)(libc.Malloc(count * int(unsafe.Sizeof(Vector2{}))))
-					trans    Mat2     = body.Shape.Transform
+					count    int       = int(vertexData.VertexCount)
+					bodyPos  Vector2   = body.Position
+					vertices []Vector2 = make([]Vector2, count)
+					trans    Mat2      = body.Shape.Transform
 				)
 				for i := int(0); i < count; i++ {
-					*(*Vector2)(unsafe.Pointer(uintptr(unsafe.Pointer(vertices)) + unsafe.Sizeof(Vector2{})*uintptr(i))) = vertexData.Positions[i]
+					vertices[i] = vertexData.Positions[i]
 				}
 				DestroyPhysicsBody(body)
 				for i := int(0); i < count; i++ {
@@ -355,15 +341,15 @@ func PhysicsShatter(body PhysicsBody, position Vector2, force float32) {
 							}
 							return 0
 						}())
-						center Vector2 = TriangleBarycenter(*(*Vector2)(unsafe.Pointer(uintptr(unsafe.Pointer(vertices)) + unsafe.Sizeof(Vector2{})*uintptr(i))), *(*Vector2)(unsafe.Pointer(uintptr(unsafe.Pointer(vertices)) + unsafe.Sizeof(Vector2{})*uintptr(nextIndex))), Vector2{X: 0.0, Y: 0.0})
+						center Vector2 = TriangleBarycenter(vertices[i], vertices[nextIndex], Vector2{X: 0.0, Y: 0.0})
 					)
 					center = Vector2Add(bodyPos, center)
 					var offset Vector2 = Vector2Subtract(center, bodyPos)
 					var newBody PhysicsBody = CreatePhysicsBodyPolygon(center, 10, 3, 10)
 					var newData PolygonData = PolygonData{}
 					newData.VertexCount = 3
-					newData.Positions[0] = Vector2Subtract(*(*Vector2)(unsafe.Pointer(uintptr(unsafe.Pointer(vertices)) + unsafe.Sizeof(Vector2{})*uintptr(i))), offset)
-					newData.Positions[1] = Vector2Subtract(*(*Vector2)(unsafe.Pointer(uintptr(unsafe.Pointer(vertices)) + unsafe.Sizeof(Vector2{})*uintptr(nextIndex))), offset)
+					newData.Positions[0] = Vector2Subtract(vertices[i], offset)
+					newData.Positions[1] = Vector2Subtract(vertices[nextIndex], offset)
 					newData.Positions[2] = Vector2Subtract(position, center)
 					newData.Positions[0].X *= 0.95
 					newData.Positions[0].Y *= 0.95
@@ -387,8 +373,8 @@ func PhysicsShatter(body PhysicsBody, position Vector2, force float32) {
 					newBody.Shape.VertexData = newData
 					newBody.Shape.Transform = trans
 					center = Vector2{X: 0.0, Y: 0.0}
-					var area float32 = 0.0
-					var inertia float32 = 0.0
+					var area float64 = 0.0
+					var inertia float64 = 0.0
 					for j := int(0); j < int(newBody.Shape.VertexData.VertexCount); j++ {
 						var (
 							p1         Vector2 = newBody.Shape.VertexData.Positions[j]
@@ -399,27 +385,27 @@ func PhysicsShatter(body PhysicsBody, position Vector2, force float32) {
 								return 0
 							}())
 							p2           Vector2 = newBody.Shape.VertexData.Positions[nextVertex]
-							D            float32 = MathCrossVector2(p1, p2)
-							triangleArea float32 = D / 2
+							D            float64 = MathCrossVector2(p1, p2)
+							triangleArea float64 = D / 2
 						)
 						area += triangleArea
-						center.X += float32(float64(triangleArea) * 1.0 / 3.0 * float64(p1.X+p2.X))
-						center.Y += float32(float64(triangleArea) * 1.0 / 3.0 * float64(p1.Y+p2.Y))
-						var intx2 float32 = p1.X*p1.X + p2.X*p1.X + p2.X*p2.X
-						var inty2 float32 = p1.Y*p1.Y + p2.Y*p1.Y + p2.Y*p2.Y
-						inertia += float32((float64(D) * (0.25 * 1.0 / 3.0)) * float64(intx2+inty2))
+						center.X += float64(float64(triangleArea) * 1.0 / 3.0 * float64(p1.X+p2.X))
+						center.Y += float64(float64(triangleArea) * 1.0 / 3.0 * float64(p1.Y+p2.Y))
+						var intx2 float64 = p1.X*p1.X + p2.X*p1.X + p2.X*p2.X
+						var inty2 float64 = p1.Y*p1.Y + p2.Y*p1.Y + p2.Y*p2.Y
+						inertia += float64((float64(D) * (0.25 * 1.0 / 3.0)) * float64(intx2+inty2))
 					}
-					center.X *= float32(1.0 / float64(area))
-					center.Y *= float32(1.0 / float64(area))
+					center.X *= float64(1.0 / float64(area))
+					center.Y *= float64(1.0 / float64(area))
 					newBody.Mass = area
 					if float64(newBody.Mass) != 0.0 {
-						newBody.InverseMass = float32(1.0 / float64(newBody.Mass))
+						newBody.InverseMass = float64(1.0 / float64(newBody.Mass))
 					} else {
 						newBody.InverseMass = 0.0
 					}
 					newBody.Inertia = inertia
 					if float64(newBody.Inertia) != 0.0 {
-						newBody.InverseInertia = float32(1.0 / float64(newBody.Inertia))
+						newBody.InverseInertia = float64(1.0 / float64(newBody.Inertia))
 					} else {
 						newBody.InverseInertia = 0.0
 					}
@@ -433,7 +419,6 @@ func PhysicsShatter(body PhysicsBody, position Vector2, force float32) {
 					forceDirection.Y *= force
 					PhysicsAddForce(newBody, forceDirection)
 				}
-				libc.Free(unsafe.Pointer(vertices))
 			}
 		}
 	}
@@ -442,10 +427,10 @@ func GetPhysicsBodiesCount() int {
 	return int(physicsBodiesCount)
 }
 func GetPhysicsBody(index int) PhysicsBody {
-	if index < int(physicsBodiesCount) {
-		if bodies[index] == nil {
-		}
-	}
+	// if index < int(physicsBodiesCount) {
+	// 	if bodies[index] == nil {
+	// 	}
+	// }
 	return bodies[index]
 }
 func GetPhysicsShapeType(index int) int {
@@ -477,8 +462,8 @@ func GetPhysicsShapeVertex(body PhysicsBody, vertex int) Vector2 {
 	if body != nil {
 		switch body.Shape.Type {
 		case PHYSICS_CIRCLE:
-			position.X = body.Position.X + math32.Cos(float32(360.0/PHYSAC_CIRCLE_VERTICES*float64(vertex)*(PHYSAC_PI/180.0)))*body.Shape.Radius
-			position.Y = body.Position.Y + math32.Sin(float32(360.0/PHYSAC_CIRCLE_VERTICES*float64(vertex)*(PHYSAC_PI/180.0)))*body.Shape.Radius
+			position.X = body.Position.X + math.Cos(float64(360.0/PHYSAC_CIRCLE_VERTICES*float64(vertex)*(PHYSAC_PI/180.0)))*body.Shape.Radius
+			position.Y = body.Position.Y + math.Sin(float64(360.0/PHYSAC_CIRCLE_VERTICES*float64(vertex)*(PHYSAC_PI/180.0)))*body.Shape.Radius
 		case PHYSICS_POLYGON:
 			var vertexData PolygonData = body.Shape.VertexData
 			position = Vector2Add(body.Position, Mat2MultiplyVector2(body.Shape.Transform, vertexData.Positions[vertex]))
@@ -487,7 +472,7 @@ func GetPhysicsShapeVertex(body PhysicsBody, vertex int) Vector2 {
 	}
 	return position
 }
-func SetPhysicsBodyRotation(body PhysicsBody, radians float32) {
+func SetPhysicsBodyRotation(body PhysicsBody, radians float64) {
 	if body != nil {
 		body.Orient = radians
 		if body.Shape.Type == PhysicsShapeType(PHYSICS_POLYGON) {
@@ -510,8 +495,6 @@ func DestroyPhysicsBody(body PhysicsBody) {
 		if index == -1 {
 			return
 		}
-		libc.Free(unsafe.Pointer(body))
-		usedMemory -= uint(unsafe.Sizeof(PhysicsBodyData{}))
 		bodies[index] = nil
 		for i := int(index); i < int(physicsBodiesCount); i++ {
 			if (i + 1) < int(physicsBodiesCount) {
@@ -523,10 +506,10 @@ func DestroyPhysicsBody(body PhysicsBody) {
 }
 func ClosePhysics() {
 	physicsThreadEnabled = bool(false)
-	for i := int(int(physicsManifoldsCount - 1)); i >= 0; i-- {
+	for i := int(physicsManifoldsCount - 1); i >= 0; i-- {
 		DestroyPhysicsManifold(contacts[i])
 	}
-	for i := int(int(physicsBodiesCount - 1)); i >= 0; i-- {
+	for i := int(physicsBodiesCount - 1); i >= 0; i-- {
 		DestroyPhysicsBody(bodies[i])
 	}
 }
@@ -547,12 +530,12 @@ func FindAvailableBodyIndex() int {
 	}
 	return index
 }
-func CreateRandomPolygon(radius float32, sides int) PolygonData {
+func CreateRandomPolygon(radius float64, sides int) PolygonData {
 	var data PolygonData = PolygonData{}
 	data.VertexCount = uint(sides)
 	for i := int(0); i < int(data.VertexCount); i++ {
-		data.Positions[i].X = math32.Cos(float32(360.0/float64(sides)*float64(i)*(PHYSAC_PI/180.0))) * radius
-		data.Positions[i].Y = math32.Sin(float32(360.0/float64(sides)*float64(i)*(PHYSAC_PI/180.0))) * radius
+		data.Positions[i].X = math.Cos(float64(360.0/float64(sides)*float64(i)*(PHYSAC_PI/180.0))) * radius
+		data.Positions[i].Y = math.Sin(float64(360.0/float64(sides)*float64(i)*(PHYSAC_PI/180.0))) * radius
 	}
 	for i := int(0); i < int(data.VertexCount); i++ {
 		var (
@@ -591,16 +574,9 @@ func CreateRectanglePolygon(pos Vector2, size Vector2) PolygonData {
 	}
 	return data
 }
-func PhysicsLoop(arg unsafe.Pointer) unsafe.Pointer {
-	physicsThreadEnabled = bool(true)
-	for physicsThreadEnabled != 0 {
-		RunPhysicsStep()
-	}
-	return nil
-}
 func PhysicsStep() {
 	stepsCount++
-	for i := int(int(physicsManifoldsCount - 1)); i >= 0; i-- {
+	for i := int(physicsManifoldsCount - 1); i >= 0; i-- {
 		var manifold PhysicsManifold = contacts[i]
 		if manifold != nil {
 			DestroyPhysicsManifold(manifold)
@@ -708,7 +684,6 @@ func FindAvailableManifoldIndex() int {
 }
 func CreatePhysicsManifold(a PhysicsBody, b PhysicsBody) PhysicsManifold {
 	var newManifold PhysicsManifold = new(PhysicsManifoldData)
-	usedMemory += uint(unsafe.Sizeof(PhysicsManifoldData{}))
 	var newId int = FindAvailableManifoldIndex()
 	if newId != -1 {
 		newManifold.Id = uint(newId)
@@ -742,8 +717,6 @@ func DestroyPhysicsManifold(manifold PhysicsManifold) {
 		if index == -1 {
 			return
 		}
-		libc.Free(unsafe.Pointer(manifold))
-		usedMemory -= uint(unsafe.Sizeof(PhysicsManifoldData{}))
 		contacts[index] = nil
 		for i := int(index); i < int(physicsManifoldsCount); i++ {
 			if (i + 1) < int(physicsManifoldsCount) {
@@ -773,8 +746,8 @@ func SolvePhysicsManifold(manifold PhysicsManifold) {
 		}
 	default:
 	}
-	if manifold.BodyB.IsGrounded == 0 {
-		manifold.BodyB.IsGrounded = bool(libc.BoolToInt(manifold.Normal.Y < 0))
+	if !manifold.BodyB.IsGrounded {
+		manifold.BodyB.IsGrounded = manifold.Normal.Y < 0
 	}
 }
 func SolveCircleToCircle(manifold PhysicsManifold) {
@@ -786,13 +759,13 @@ func SolveCircleToCircle(manifold PhysicsManifold) {
 		return
 	}
 	var normal Vector2 = Vector2Subtract(bodyB.Position, bodyA.Position)
-	var distSqr float32 = MathLenSqr(normal)
-	var radius float32 = bodyA.Shape.Radius + bodyB.Shape.Radius
+	var distSqr float64 = MathLenSqr(normal)
+	var radius float64 = bodyA.Shape.Radius + bodyB.Shape.Radius
 	if distSqr >= radius*radius {
 		manifold.ContactsCount = 0
 		return
 	}
-	var distance float32 = math32.Sqrt(distSqr)
+	var distance float64 = math.Sqrt(distSqr)
 	manifold.ContactsCount = 1
 	if float64(distance) == 0.0 {
 		manifold.Penetration = bodyA.Shape.Radius
@@ -803,8 +776,8 @@ func SolveCircleToCircle(manifold PhysicsManifold) {
 		manifold.Normal = Vector2{X: normal.X / distance, Y: normal.Y / distance}
 		manifold.Contacts[0] = Vector2{X: manifold.Normal.X*bodyA.Shape.Radius + bodyA.Position.X, Y: manifold.Normal.Y*bodyA.Shape.Radius + bodyA.Position.Y}
 	}
-	if bodyA.IsGrounded == 0 {
-		bodyA.IsGrounded = bool(libc.BoolToInt(manifold.Normal.Y < 0))
+	if !bodyA.IsGrounded {
+		bodyA.IsGrounded = manifold.Normal.Y < 0
 	}
 }
 func SolveCircleToPolygon(manifold PhysicsManifold) {
@@ -833,11 +806,11 @@ func SolveDifferentShapes(manifold PhysicsManifold, bodyA PhysicsBody, bodyB Phy
 	manifold.ContactsCount = 0
 	var center Vector2 = bodyA.Position
 	center = Mat2MultiplyVector2(Mat2Transpose(bodyB.Shape.Transform), Vector2Subtract(center, bodyB.Position))
-	var separation float32 = float32(-PHYSAC_FLT_MAX)
+	var separation float64 = float64(-PHYSAC_FLT_MAX)
 	var faceNormal int = 0
 	var vertexData PolygonData = bodyB.Shape.VertexData
 	for i := int(0); i < int(vertexData.VertexCount); i++ {
-		var currentSeparation float32 = MathDot(vertexData.Normals[i], Vector2Subtract(center, vertexData.Positions[i]))
+		var currentSeparation float64 = MathDot(vertexData.Normals[i], Vector2Subtract(center, vertexData.Positions[i]))
 		if currentSeparation > bodyA.Shape.Radius {
 			return
 		}
@@ -862,8 +835,8 @@ func SolveDifferentShapes(manifold PhysicsManifold, bodyA PhysicsBody, bodyB Phy
 		manifold.Penetration = bodyA.Shape.Radius
 		return
 	}
-	var dot1 float32 = MathDot(Vector2Subtract(center, v1), Vector2Subtract(v2, v1))
-	var dot2 float32 = MathDot(Vector2Subtract(center, v2), Vector2Subtract(v1, v2))
+	var dot1 float64 = MathDot(Vector2Subtract(center, v1), Vector2Subtract(v2, v1))
+	var dot2 float64 = MathDot(Vector2Subtract(center, v2), Vector2Subtract(v1, v2))
 	manifold.Penetration = bodyA.Shape.Radius - separation
 	if float64(dot1) <= 0.0 {
 		if DistSqr(center, v1) > bodyA.Shape.Radius*bodyA.Shape.Radius {
@@ -908,12 +881,12 @@ func SolvePolygonToPolygon(manifold PhysicsManifold) {
 	var bodyB PhysicsShape = manifold.BodyB.Shape
 	manifold.ContactsCount = 0
 	var faceA int = 0
-	var penetrationA float32 = FindAxisLeastPenetration(&faceA, bodyA, bodyB)
+	var penetrationA float64 = FindAxisLeastPenetration(&faceA, bodyA, bodyB)
 	if float64(penetrationA) >= 0.0 {
 		return
 	}
 	var faceB int = 0
-	var penetrationB float32 = FindAxisLeastPenetration(&faceB, bodyB, bodyA)
+	var penetrationB float64 = FindAxisLeastPenetration(&faceB, bodyB, bodyA)
 	if float64(penetrationB) >= 0.0 {
 		return
 	}
@@ -921,7 +894,7 @@ func SolvePolygonToPolygon(manifold PhysicsManifold) {
 	var flip bool = bool(false)
 	var refPoly PhysicsShape
 	var incPoly PhysicsShape
-	if BiasGreaterThan(penetrationA, penetrationB) != 0 {
+	if BiasGreaterThan(penetrationA, penetrationB) {
 		refPoly = bodyA
 		incPoly = bodyB
 		referenceIndex = faceA
@@ -948,22 +921,22 @@ func SolvePolygonToPolygon(manifold PhysicsManifold) {
 	var sidePlaneNormal Vector2 = Vector2Subtract(v2, v1)
 	MathNormalize(&sidePlaneNormal)
 	var refFaceNormal Vector2 = Vector2{X: sidePlaneNormal.Y, Y: -sidePlaneNormal.X}
-	var refC float32 = MathDot(refFaceNormal, v1)
-	var negSide float32 = MathDot(sidePlaneNormal, v1) * float32(-1)
-	var posSide float32 = MathDot(sidePlaneNormal, v2)
+	var refC float64 = MathDot(refFaceNormal, v1)
+	var negSide float64 = MathDot(sidePlaneNormal, v1) * float64(-1)
+	var posSide float64 = MathDot(sidePlaneNormal, v2)
 	if Clip(Vector2{X: -sidePlaneNormal.X, Y: -sidePlaneNormal.Y}, negSide, &incidentFace[0], &incidentFace[1]) < 2 {
 		return
 	}
 	if Clip(sidePlaneNormal, posSide, &incidentFace[0], &incidentFace[1]) < 2 {
 		return
 	}
-	if flip != 0 {
+	if flip {
 		manifold.Normal = Vector2{X: -refFaceNormal.X, Y: -refFaceNormal.Y}
 	} else {
 		manifold.Normal = refFaceNormal
 	}
 	var currentPoint int = 0
-	var separation float32 = MathDot(refFaceNormal, incidentFace[0]) - refC
+	var separation float64 = MathDot(refFaceNormal, incidentFace[0]) - refC
 	if float64(separation) <= 0.0 {
 		manifold.Contacts[currentPoint] = incidentFace[0]
 		manifold.Penetration = -separation
@@ -976,22 +949,22 @@ func SolvePolygonToPolygon(manifold PhysicsManifold) {
 		manifold.Contacts[currentPoint] = incidentFace[1]
 		manifold.Penetration += -separation
 		currentPoint++
-		manifold.Penetration /= float32(currentPoint)
+		manifold.Penetration /= float64(currentPoint)
 	}
 	manifold.ContactsCount = uint(currentPoint)
 }
 func IntegratePhysicsForces(body PhysicsBody) {
-	if body == nil || float64(body.InverseMass) == 0.0 || body.Enabled == 0 {
+	if body == nil || float64(body.InverseMass) == 0.0 || !body.Enabled {
 		return
 	}
-	body.Velocity.X += float32(float64(body.Force.X*body.InverseMass) * (deltaTime / 2.0))
-	body.Velocity.Y += float32(float64(body.Force.Y*body.InverseMass) * (deltaTime / 2.0))
-	if body.UseGravity != 0 {
-		body.Velocity.X += float32(float64(gravityForce.X) * (deltaTime / 1000 / 2.0))
-		body.Velocity.Y += float32(float64(gravityForce.Y) * (deltaTime / 1000 / 2.0))
+	body.Velocity.X += float64(float64(body.Force.X*body.InverseMass) * (deltaTime / 2.0))
+	body.Velocity.Y += float64(float64(body.Force.Y*body.InverseMass) * (deltaTime / 2.0))
+	if body.UseGravity {
+		body.Velocity.X += float64(float64(gravityForce.X) * (deltaTime / 1000 / 2.0))
+		body.Velocity.Y += float64(float64(gravityForce.Y) * (deltaTime / 1000 / 2.0))
 	}
-	if body.FreezeOrient == 0 {
-		body.AngularVelocity += float32(float64(body.Torque*body.InverseInertia) * (deltaTime / 2.0))
+	if body.FreezeOrient {
+		body.AngularVelocity += float64(float64(body.Torque*body.InverseInertia) * (deltaTime / 2.0))
 	}
 }
 func InitializePhysicsManifolds(manifold PhysicsManifold) {
@@ -1002,9 +975,9 @@ func InitializePhysicsManifolds(manifold PhysicsManifold) {
 	if bodyA == nil || bodyB == nil {
 		return
 	}
-	manifold.Restitution = math32.Sqrt(bodyA.Restitution * bodyB.Restitution)
-	manifold.StaticFriction = math32.Sqrt(bodyA.StaticFriction * bodyB.StaticFriction)
-	manifold.DynamicFriction = math32.Sqrt(bodyA.DynamicFriction * bodyB.DynamicFriction)
+	manifold.Restitution = math.Sqrt(bodyA.Restitution * bodyB.Restitution)
+	manifold.StaticFriction = math.Sqrt(bodyA.StaticFriction * bodyB.StaticFriction)
+	manifold.DynamicFriction = math.Sqrt(bodyA.DynamicFriction * bodyB.DynamicFriction)
 	for i := int(0); i < int(manifold.ContactsCount); i++ {
 		var (
 			radiusA Vector2 = Vector2Subtract(manifold.Contacts[i], bodyA.Position)
@@ -1015,7 +988,7 @@ func InitializePhysicsManifolds(manifold PhysicsManifold) {
 		)
 		radiusV.X = bodyB.Velocity.X + crossB.X - bodyA.Velocity.X - crossA.X
 		radiusV.Y = bodyB.Velocity.Y + crossB.Y - bodyA.Velocity.Y - crossA.Y
-		if float64(MathLenSqr(radiusV)) < (float64(MathLenSqr(Vector2{X: float32(float64(gravityForce.X) * deltaTime / 1000), Y: float32(float64(gravityForce.Y) * deltaTime / 1000)})) + PHYSAC_EPSILON) {
+		if float64(MathLenSqr(radiusV)) < (float64(MathLenSqr(Vector2{X: float64(float64(gravityForce.X) * deltaTime / 1000), Y: float64(float64(gravityForce.Y) * deltaTime / 1000)})) + PHYSAC_EPSILON) {
 			manifold.Restitution = 0
 		}
 	}
@@ -1041,28 +1014,28 @@ func IntegratePhysicsImpulses(manifold PhysicsManifold) {
 		)
 		radiusV.X = bodyB.Velocity.X + MathCross(bodyB.AngularVelocity, radiusB).X - bodyA.Velocity.X - MathCross(bodyA.AngularVelocity, radiusA).X
 		radiusV.Y = bodyB.Velocity.Y + MathCross(bodyB.AngularVelocity, radiusB).Y - bodyA.Velocity.Y - MathCross(bodyA.AngularVelocity, radiusA).Y
-		var contactVelocity float32 = MathDot(radiusV, manifold.Normal)
+		var contactVelocity float64 = MathDot(radiusV, manifold.Normal)
 		if float64(contactVelocity) > 0.0 {
 			return
 		}
-		var raCrossN float32 = MathCrossVector2(radiusA, manifold.Normal)
-		var rbCrossN float32 = MathCrossVector2(radiusB, manifold.Normal)
-		var inverseMassSum float32 = bodyA.InverseMass + bodyB.InverseMass + (raCrossN*raCrossN)*bodyA.InverseInertia + (rbCrossN*rbCrossN)*bodyB.InverseInertia
-		var impulse float32 = float32(-(float64(manifold.Restitution) + 1.0)) * contactVelocity
+		var raCrossN float64 = MathCrossVector2(radiusA, manifold.Normal)
+		var rbCrossN float64 = MathCrossVector2(radiusB, manifold.Normal)
+		var inverseMassSum float64 = bodyA.InverseMass + bodyB.InverseMass + (raCrossN*raCrossN)*bodyA.InverseInertia + (rbCrossN*rbCrossN)*bodyB.InverseInertia
+		var impulse float64 = float64(-(float64(manifold.Restitution) + 1.0)) * contactVelocity
 		impulse /= inverseMassSum
-		impulse /= float32(manifold.ContactsCount)
+		impulse /= float64(manifold.ContactsCount)
 		var impulseV Vector2 = Vector2{X: manifold.Normal.X * impulse, Y: manifold.Normal.Y * impulse}
-		if bodyA.Enabled != 0 {
+		if bodyA.Enabled {
 			bodyA.Velocity.X += bodyA.InverseMass * (-impulseV.X)
 			bodyA.Velocity.Y += bodyA.InverseMass * (-impulseV.Y)
-			if bodyA.FreezeOrient == 0 {
+			if !bodyA.FreezeOrient {
 				bodyA.AngularVelocity += bodyA.InverseInertia * MathCrossVector2(radiusA, Vector2{X: -impulseV.X, Y: -impulseV.Y})
 			}
 		}
-		if bodyB.Enabled != 0 {
+		if bodyB.Enabled {
 			bodyB.Velocity.X += bodyB.InverseMass * impulseV.X
 			bodyB.Velocity.Y += bodyB.InverseMass * impulseV.Y
-			if bodyB.FreezeOrient == 0 {
+			if !bodyB.FreezeOrient {
 				bodyB.AngularVelocity += bodyB.InverseInertia * MathCrossVector2(radiusB, impulseV)
 			}
 		}
@@ -1070,10 +1043,10 @@ func IntegratePhysicsImpulses(manifold PhysicsManifold) {
 		radiusV.Y = bodyB.Velocity.Y + MathCross(bodyB.AngularVelocity, radiusB).Y - bodyA.Velocity.Y - MathCross(bodyA.AngularVelocity, radiusA).Y
 		var tangent Vector2 = Vector2{X: radiusV.X - manifold.Normal.X*MathDot(radiusV, manifold.Normal), Y: radiusV.Y - manifold.Normal.Y*MathDot(radiusV, manifold.Normal)}
 		MathNormalize(&tangent)
-		var impulseTangent float32 = -MathDot(radiusV, tangent)
+		var impulseTangent float64 = -MathDot(radiusV, tangent)
 		impulseTangent /= inverseMassSum
-		impulseTangent /= float32(manifold.ContactsCount)
-		var absImpulseTangent float32 = float32(math.Abs(float64(impulseTangent)))
+		impulseTangent /= float64(manifold.ContactsCount)
+		var absImpulseTangent float64 = float64(math.Abs(float64(impulseTangent)))
 		if float64(absImpulseTangent) <= PHYSAC_EPSILON {
 			return
 		}
@@ -1083,30 +1056,30 @@ func IntegratePhysicsImpulses(manifold PhysicsManifold) {
 		} else {
 			tangentImpulse = Vector2{X: tangent.X * (-impulse) * manifold.DynamicFriction, Y: tangent.Y * (-impulse) * manifold.DynamicFriction}
 		}
-		if bodyA.Enabled != 0 {
+		if bodyA.Enabled {
 			bodyA.Velocity.X += bodyA.InverseMass * (-tangentImpulse.X)
 			bodyA.Velocity.Y += bodyA.InverseMass * (-tangentImpulse.Y)
-			if bodyA.FreezeOrient == 0 {
+			if !bodyA.FreezeOrient {
 				bodyA.AngularVelocity += bodyA.InverseInertia * MathCrossVector2(radiusA, Vector2{X: -tangentImpulse.X, Y: -tangentImpulse.Y})
 			}
 		}
-		if bodyB.Enabled != 0 {
+		if bodyB.Enabled {
 			bodyB.Velocity.X += bodyB.InverseMass * tangentImpulse.X
 			bodyB.Velocity.Y += bodyB.InverseMass * tangentImpulse.Y
-			if bodyB.FreezeOrient == 0 {
+			if !bodyB.FreezeOrient {
 				bodyB.AngularVelocity += bodyB.InverseInertia * MathCrossVector2(radiusB, tangentImpulse)
 			}
 		}
 	}
 }
 func IntegratePhysicsVelocity(body PhysicsBody) {
-	if body == nil || body.Enabled == 0 {
+	if body == nil || !body.Enabled {
 		return
 	}
-	body.Position.X += float32(float64(body.Velocity.X) * deltaTime)
-	body.Position.Y += float32(float64(body.Velocity.Y) * deltaTime)
-	if body.FreezeOrient == 0 {
-		body.Orient += float32(float64(body.AngularVelocity) * deltaTime)
+	body.Position.X += float64(float64(body.Velocity.X) * deltaTime)
+	body.Position.Y += float64(float64(body.Velocity.Y) * deltaTime)
+	if !body.FreezeOrient {
+		body.Orient += float64(float64(body.AngularVelocity) * deltaTime)
 	}
 	Mat2Set(&body.Shape.Transform, body.Orient)
 	IntegratePhysicsForces(body)
@@ -1120,37 +1093,37 @@ func CorrectPhysicsPositions(manifold PhysicsManifold) {
 		return
 	}
 	var correction Vector2 = Vector2{X: 0.0, Y: 0.0}
-	correction.X = float32(((func() float64 {
+	correction.X = float64(((func() float64 {
 		if (float64(manifold.Penetration) - PHYSAC_PENETRATION_ALLOWANCE) > 0.0 {
 			return float64(manifold.Penetration) - PHYSAC_PENETRATION_ALLOWANCE
 		}
 		return 0.0
 	}()) / float64(bodyA.InverseMass+bodyB.InverseMass)) * float64(manifold.Normal.X) * PHYSAC_PENETRATION_CORRECTION)
-	correction.Y = float32(((func() float64 {
+	correction.Y = float64(((func() float64 {
 		if (float64(manifold.Penetration) - PHYSAC_PENETRATION_ALLOWANCE) > 0.0 {
 			return float64(manifold.Penetration) - PHYSAC_PENETRATION_ALLOWANCE
 		}
 		return 0.0
 	}()) / float64(bodyA.InverseMass+bodyB.InverseMass)) * float64(manifold.Normal.Y) * PHYSAC_PENETRATION_CORRECTION)
-	if bodyA.Enabled != 0 {
+	if bodyA.Enabled {
 		bodyA.Position.X -= correction.X * bodyA.InverseMass
 		bodyA.Position.Y -= correction.Y * bodyA.InverseMass
 	}
-	if bodyB.Enabled != 0 {
+	if bodyB.Enabled {
 		bodyB.Position.X += correction.X * bodyB.InverseMass
 		bodyB.Position.Y += correction.Y * bodyB.InverseMass
 	}
 }
 func GetSupport(shape PhysicsShape, dir Vector2) Vector2 {
 	var (
-		bestProjection float32     = float32(-PHYSAC_FLT_MAX)
+		bestProjection float64     = float64(-PHYSAC_FLT_MAX)
 		bestVertex     Vector2     = Vector2{X: 0.0, Y: 0.0}
 		data           PolygonData = shape.VertexData
 	)
 	for i := int(0); i < int(data.VertexCount); i++ {
 		var (
 			vertex     Vector2 = data.Positions[i]
-			projection float32 = MathDot(vertex, dir)
+			projection float64 = MathDot(vertex, dir)
 		)
 		if projection > bestProjection {
 			bestVertex = vertex
@@ -1159,9 +1132,9 @@ func GetSupport(shape PhysicsShape, dir Vector2) Vector2 {
 	}
 	return bestVertex
 }
-func FindAxisLeastPenetration(faceIndex *int, shapeA PhysicsShape, shapeB PhysicsShape) float32 {
+func FindAxisLeastPenetration(faceIndex *int, shapeA PhysicsShape, shapeB PhysicsShape) float64 {
 	var (
-		bestDistance float32     = float32(-PHYSAC_FLT_MAX)
+		bestDistance float64     = float64(-PHYSAC_FLT_MAX)
 		bestIndex    int         = 0
 		dataA        PolygonData = shapeA.VertexData
 	)
@@ -1178,7 +1151,7 @@ func FindAxisLeastPenetration(faceIndex *int, shapeA PhysicsShape, shapeB Physic
 		vertex = Vector2Add(vertex, shapeA.Body.Position)
 		vertex = Vector2Subtract(vertex, shapeB.Body.Position)
 		vertex = Mat2MultiplyVector2(buT, vertex)
-		var distance float32 = MathDot(normal, Vector2Subtract(support, vertex))
+		var distance float64 = MathDot(normal, Vector2Subtract(support, vertex))
 		if distance > bestDistance {
 			bestDistance = distance
 			bestIndex = i
@@ -1196,9 +1169,9 @@ func FindIncidentFace(v0 *Vector2, v1 *Vector2, ref PhysicsShape, inc PhysicsSha
 	referenceNormal = Mat2MultiplyVector2(ref.Transform, referenceNormal)
 	referenceNormal = Mat2MultiplyVector2(Mat2Transpose(inc.Transform), referenceNormal)
 	var incidentFace int = 0
-	var minDot float32 = float32(PHYSAC_FLT_MAX)
+	var minDot float64 = float64(PHYSAC_FLT_MAX)
 	for i := int(0); i < int(incData.VertexCount); i++ {
-		var dot float32 = MathDot(referenceNormal, incData.Normals[i])
+		var dot float64 = MathDot(referenceNormal, incData.Normals[i])
 		if dot < minDot {
 			minDot = dot
 			incidentFace = i
@@ -1214,12 +1187,12 @@ func FindIncidentFace(v0 *Vector2, v1 *Vector2, ref PhysicsShape, inc PhysicsSha
 	*v1 = Mat2MultiplyVector2(inc.Transform, incData.Positions[incidentFace])
 	*v1 = Vector2Add(*v1, inc.Body.Position)
 }
-func Clip(normal Vector2, clip float32, faceA *Vector2, faceB *Vector2) int {
+func Clip(normal Vector2, clip float64, faceA *Vector2, faceB *Vector2) int {
 	var (
 		sp        int        = 0
 		out       [2]Vector2 = [2]Vector2{*faceA, *faceB}
-		distanceA float32    = MathDot(normal, *faceA) - clip
-		distanceB float32    = MathDot(normal, *faceB) - clip
+		distanceA float64    = MathDot(normal, *faceA) - clip
+		distanceB float64    = MathDot(normal, *faceB) - clip
 	)
 	if float64(distanceA) <= 0.0 {
 		out[func() int {
@@ -1238,7 +1211,7 @@ func Clip(normal Vector2, clip float32, faceA *Vector2, faceB *Vector2) int {
 		}()] = *faceB
 	}
 	if float64(distanceA*distanceB) < 0.0 {
-		var alpha float32 = distanceA / (distanceA - distanceB)
+		var alpha float64 = distanceA / (distanceA - distanceB)
 		out[sp] = *faceA
 		var delta Vector2 = Vector2Subtract(*faceB, *faceA)
 		delta.X *= alpha
@@ -1250,8 +1223,8 @@ func Clip(normal Vector2, clip float32, faceA *Vector2, faceB *Vector2) int {
 	*faceB = out[1]
 	return sp
 }
-func BiasGreaterThan(valueA float32, valueB float32) bool {
-	return bool(libc.BoolToInt(float64(valueA) >= (float64(valueB)*0.95 + float64(valueA)*0.01)))
+func BiasGreaterThan(valueA float64, valueB float64) bool {
+	return float64(valueA) >= (float64(valueB)*0.95 + float64(valueA)*0.01)
 }
 func TriangleBarycenter(v1 Vector2, v2 Vector2, v3 Vector2) Vector2 {
 	var result Vector2 = Vector2{X: 0.0, Y: 0.0}
@@ -1260,53 +1233,44 @@ func TriangleBarycenter(v1 Vector2, v2 Vector2, v3 Vector2) Vector2 {
 	return result
 }
 func InitTimer() {
-	libc.SeedRand(uint32(libc.GetTime(nil)))
-	var now libc.TimeSpec
-	if int(libc.ClockGetTime(CLOCK_MONOTONIC, &now)) == 0 {
-		frequency = 1000000000
-	}
+	rand.Seed(time.Now().Unix())
+	frequency = 1000000000
 	baseTime = float64(GetTimeCount())
 	startTime = GetCurrentTime()
 }
-func GetTimeCount() uint64 {
-	var (
-		value uint64 = 0
-		now   libc.TimeSpec
-	)
-	libc.ClockGetTime(CLOCK_MONOTONIC, &now)
-	value = uint64(now.Sec)*1000000000 + uint64(now.NSec)
-	return value
+func GetTimeCount() int64 {
+	return time.Now().UnixNano()
 }
 func GetCurrentTime() float64 {
 	return (float64(GetTimeCount()) - baseTime) / float64(frequency) * 1000
 }
-func MathCross(value float32, vector Vector2) Vector2 {
+func MathCross(value float64, vector Vector2) Vector2 {
 	return Vector2{X: -value * vector.Y, Y: value * vector.X}
 }
-func MathCrossVector2(v1 Vector2, v2 Vector2) float32 {
+func MathCrossVector2(v1 Vector2, v2 Vector2) float64 {
 	return v1.X*v2.Y - v1.Y*v2.X
 }
-func MathLenSqr(vector Vector2) float32 {
+func MathLenSqr(vector Vector2) float64 {
 	return vector.X*vector.X + vector.Y*vector.Y
 }
-func MathDot(v1 Vector2, v2 Vector2) float32 {
+func MathDot(v1 Vector2, v2 Vector2) float64 {
 	return v1.X*v2.X + v1.Y*v2.Y
 }
-func DistSqr(v1 Vector2, v2 Vector2) float32 {
+func DistSqr(v1 Vector2, v2 Vector2) float64 {
 	var dir Vector2 = Vector2Subtract(v1, v2)
 	return MathDot(dir, dir)
 }
 func MathNormalize(vector *Vector2) {
 	var (
-		length  float32
-		ilength float32
+		length  float64
+		ilength float64
 		aux     Vector2 = *vector
 	)
-	length = math32.Sqrt(aux.X*aux.X + aux.Y*aux.Y)
+	length = math.Sqrt(aux.X*aux.X + aux.Y*aux.Y)
 	if length == 0 {
 		length = 1.0
 	}
-	ilength = float32(1.0 / float64(length))
+	ilength = float64(1.0 / float64(length))
 	vector.X *= ilength
 	vector.Y *= ilength
 }
@@ -1316,17 +1280,17 @@ func Vector2Add(v1 Vector2, v2 Vector2) Vector2 {
 func Vector2Subtract(v1 Vector2, v2 Vector2) Vector2 {
 	return Vector2{X: v1.X - v2.X, Y: v1.Y - v2.Y}
 }
-func Mat2Radians(radians float32) Mat2 {
+func Mat2Radians(radians float64) Mat2 {
 	var (
-		c float32 = math32.Cos(radians)
-		s float32 = math32.Sin(radians)
+		c float64 = math.Cos(radians)
+		s float64 = math.Sin(radians)
 	)
 	return Mat2{M00: c, M01: -s, M10: s, M11: c}
 }
-func Mat2Set(matrix *Mat2, radians float32) {
+func Mat2Set(matrix *Mat2, radians float64) {
 	var (
-		cos float32 = math32.Cos(radians)
-		sin float32 = math32.Sin(radians)
+		cos float64 = math.Cos(radians)
+		sin float64 = math.Sin(radians)
 	)
 	matrix.M00 = cos
 	matrix.M01 = -sin
