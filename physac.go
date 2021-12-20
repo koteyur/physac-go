@@ -256,8 +256,8 @@ func CreatePhysicsBodyRectangle(pos Vector2, width float64, height float64, dens
 	// Calculate centroid and moment of inertia
 	newBody.Shape.Body = newBody
 	var center Vector2
-	var area = 0.0
-	var inertia = 0.0
+	area := 0.0
+	inertia := 0.0
 
 	for i := 0; i < int(newBody.Shape.VertexData.VertexCount); i++ {
 		// Triangle vertices, third vertex implied as (0, 0)
@@ -334,8 +334,8 @@ func CreatePhysicsBodyPolygon(pos Vector2, radius float64, sides int, density fl
 
 	// Calculate centroid and moment of inertia
 	var center Vector2
-	var area = 0.0
-	var inertia = 0.0
+	area := 0.0
+	inertia := 0.0
 
 	for i := 0; i < int(newBody.Shape.VertexData.VertexCount); i++ {
 		// Triangle vertices, third vertex implied as (0, 0)
@@ -1014,8 +1014,8 @@ func solveDifferentShapes(manifold PhysicsManifold, bodyA PhysicsBody, bodyB Phy
 	// Find edge with minimum penetration
 	// It is the same concept as using support points in SolvePolygonToPolygon
 	var separation float64 = float64(-PHYSAC_FLT_MAX)
-	var faceNormal = 0
-	var vertexData = bodyB.Shape.VertexData
+	faceNormal := 0
+	vertexData := bodyB.Shape.VertexData
 
 	for i := 0; i < int(vertexData.VertexCount); i++ {
 		currentSeparation := mathDot(

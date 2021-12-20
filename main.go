@@ -15,9 +15,7 @@ const (
 	screenHeight = 720
 )
 
-var (
-	emptyImage = ebiten.NewImage(3, 3)
-)
+var emptyImage = ebiten.NewImage(3, 3)
 
 func init() {
 	emptyImage.Fill(color.White)
@@ -47,7 +45,6 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-
 	for i := 0; i < GetPhysicsBodiesCount(); i++ {
 		body := GetPhysicsBody(i)
 		if body == nil {
