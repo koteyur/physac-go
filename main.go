@@ -33,34 +33,34 @@ func (g *Game) Update() error {
 
 		g.physicsActive = !g.physicsActive
 		if g.physicsActive {
-			InitPhysics()
+			Init()
 		}
 	}
 
 	if g.physicsActive {
-		RunPhysicsStep()
+		RunStep()
 	}
 
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	for i := 0; i < GetPhysicsBodiesCount(); i++ {
-		body := GetPhysicsBody(i)
+	for i := 0; i < GetBodiesCount(); i++ {
+		body := GetBody(i)
 		if body == nil {
 			continue
 		}
-		vertexCount := GetPhysicsShapeVerticesCount(i)
+		vertexCount := GetShapeVerticesCount(i)
 		for j := 0; j < vertexCount; j++ {
 			// Get physics bodies shape vertices to draw lines
 			// Note: GetPhysicsShapeVertex() already calculates rotation transformations
-			vertexA := GetPhysicsShapeVertex(body, j)
+			vertexA := GetShapeVertex(body, j)
 
 			jj := 0
 			if j+1 < vertexCount {
 				jj = j + 1 // Get next vertex or first to close the shape
 			}
-			vertexB := GetPhysicsShapeVertex(body, jj)
+			vertexB := GetShapeVertex(body, jj)
 
 			ebitenutil.DrawLine(screen,
 				vertexA.X, vertexA.Y,
@@ -82,31 +82,31 @@ func main() {
 	ebiten.SetWindowTitle("Physac golang demo")
 
 	// Create floor rectangle physics body
-	floor := CreatePhysicsBodyRectangle(Vector2{screenWidth / 2, screenHeight * 0.975},
+	floor := CreateBodyRectangle(Vector2{screenWidth / 2, screenHeight * 0.975},
 		screenWidth*1.3, screenHeight/5, 10)
-	SetPhysicsBodyRotation(floor, (math.Pi/180)*3)
+	SetBodyRotation(floor, (math.Pi/180)*3)
 	floor.Enabled = false // Disable body state to convert it to static (no dynamics, but collisions)
 	floor.Restitution = 1
 
-	floor2 := CreatePhysicsBodyRectangle(Vector2{screenWidth / 2, screenHeight * 0.975},
+	floor2 := CreateBodyRectangle(Vector2{screenWidth / 2, screenHeight * 0.975},
 		screenWidth*1.3, screenHeight/5, 10)
-	SetPhysicsBodyRotation(floor2, (math.Pi/180)*-3)
+	SetBodyRotation(floor2, (math.Pi/180)*-3)
 	floor2.Enabled = false // Disable body state to convert it to static (no dynamics, but collisions)
 	floor2.Restitution = 1
 
-	circle := CreatePhysicsBodyCircle(Vector2{screenWidth * 0.10, screenHeight * 0.1},
+	circle := CreateBodyCircle(Vector2{screenWidth * 0.10, screenHeight * 0.1},
 		screenWidth*0.02, 10)
 	circle.Restitution = 0.5
 
-	circle2 := CreatePhysicsBodyCircle(Vector2{screenWidth * 0.90, screenHeight * 0.2},
+	circle2 := CreateBodyCircle(Vector2{screenWidth * 0.90, screenHeight * 0.2},
 		screenWidth*0.03, 10)
 	circle2.Restitution = 0.3
 
-	circle3 := CreatePhysicsBodyCircle(Vector2{screenWidth * 0.50, screenHeight * 0.05},
+	circle3 := CreateBodyCircle(Vector2{screenWidth * 0.50, screenHeight * 0.05},
 		screenWidth*0.015, 10)
 	circle3.Restitution = 1
 
-	SetPhysicsGravity(0, 9.81/10)
+	SetGravity(0, 9.81/10)
 
 	if err := ebiten.RunGame(&Game{}); err != nil {
 		log.Fatal(err)
